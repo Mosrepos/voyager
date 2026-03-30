@@ -1526,5 +1526,20 @@
   "moveSectionDown": {
     "message": "Move down",
     "description": "Tooltip for moving a settings section down in popup"
+  },
+  "autoSortSettings": {
+    "message": "Auto-Categorize Chats"
+  },
+  "autoSortDescription": {
+    "message": "Automatically sort new chats into folders using Google AI Studio."
+  },
+  "autoSortEnabled": {
+    "message": "Enable Auto-Sort"
+  },
+  "autoSortApiKey": {
+    "message": "Google AI Studio API Key"
+  },
+  "autoSortApiKeyPlaceholder": {
+    "message": "Enter your Gemini API key"
   }
 }

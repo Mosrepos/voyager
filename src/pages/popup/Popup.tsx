@@ -29,6 +29,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useWidthAdjuster } from '../../hooks/useWidthAdjuster';
 import { CloudSyncSettings } from './components/CloudSyncSettings';
 import { ContextSyncSettings } from './components/ContextSyncSettings';
+import { AutoSortSettings } from './components/AutoSortSettings';
 import { KeyboardShortcutSettings } from './components/KeyboardShortcutSettings';
 import { StarredHistory } from './components/StarredHistory';
 import {
@@ -51,6 +52,7 @@ type ScrollMode = 'jump' | 'flow';
 const POPUP_SECTION_IDS = [
   'cloudSync',
   'contextSync',
+  'autoSort',
   'timeline',
   'folder',
   'folderSpacing',
@@ -1362,6 +1364,8 @@ export default function Popup() {
         {!isSafariBrowser && wrapSection('cloudSync', <CloudSyncSettings />)}
         {/* Context Sync */}
         {wrapSection('contextSync', <ContextSyncSettings />)}
+        {/* Auto Sort */}
+        {wrapSection('autoSort', <AutoSortSettings />)}
         {/* Timeline Options */}
         {wrapSection(
           'timeline',

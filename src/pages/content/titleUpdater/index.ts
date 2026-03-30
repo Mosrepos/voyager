@@ -111,8 +111,23 @@ function tryUpdateTitle() {
 
   // Update only if title actually changed
   if (currentTitle !== lastTitle) {
+    // If we transition from an empty state to a new title, it's a new chat naming event
+    const isNewChat = lastTitle === '';
+    
     document.title = `${currentTitle} - Gemini`;
     lastTitle = currentTitle;
+
+    // Trigger Auto-Categorize Hook
+    if (isNewChat) {
+      chrome.runtime.sendMessage({
+        type: 'gv.ai.categorize',
+        payload: {
+          title: currentTitle,
+          url: location.href,
+          pathname: location.pathname
+        }
+      });
+    }
   }
 }
 

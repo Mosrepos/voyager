@@ -101,6 +101,10 @@ export const StorageKeys = {
   FORK_NODES: 'gvForkNodes',
   FORK_ENABLED: 'gvForkEnabled',
 
+  // Auto-Categorization
+  GV_AUTOSORT_ENABLED: 'gvAutoSortEnabled',
+  GV_AUTOSORT_API_KEY: 'gvAutoSortApiKey',
+
   // AI Studio master toggle
   GV_AISTUDIO_ENABLED: 'gvAIStudioEnabled',
 

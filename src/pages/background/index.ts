@@ -9,7 +9,7 @@ import {
   extractRouteUserIdFromUrl,
 } from '@/core/services/AccountIsolationService';
 import { googleDriveSyncService } from '@/core/services/GoogleDriveSyncService';
-import { StorageKeys } from '@/core/types/common';
+import { type ConversationId, StorageKeys } from '@/core/types/common';
 import type { FolderData } from '@/core/types/folder';
 import type { PromptItem, SyncAccountScope, SyncMode } from '@/core/types/sync';
 import type { ForkNode, ForkNodesData } from '@/pages/content/fork/forkTypes';
@@ -614,6 +614,84 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             pageUrl: payload?.pageUrl ?? sender.tab?.url ?? null,
           }),
         });
+        return;
+      }
+
+      if (message?.type === 'gv.ai.categorize') {
+        const payload = message.payload as {
+          title: string;
+          url: string;
+          pathname: string;
+        };
+        const settings = await chrome.storage.sync.get([
+          StorageKeys.GV_AUTOSORT_ENABLED,
+          StorageKeys.GV_AUTOSORT_API_KEY,
+          StorageKeys.FOLDER_DATA,
+        ]);
+
+        if (settings[StorageKeys.GV_AUTOSORT_ENABLED] !== true || !settings[StorageKeys.GV_AUTOSORT_API_KEY]) {
+          sendResponse({ ok: false, error: 'Disabled or no API key' });
+          return;
+        }
+
+        const folderData = settings[StorageKeys.FOLDER_DATA] as FolderData;
+        if (!folderData || !folderData.folders || folderData.folders.length === 0) {
+          sendResponse({ ok: false, error: 'No folders' });
+          return;
+        }
+
+        const apiKey = settings[StorageKeys.GV_AUTOSORT_API_KEY];
+        const folderListText = folderData.folders.map((f) => `- ${f.name} (ID: ${f.id})`).join('\n');
+
+        const prompt = `Categorize this new chat title into the most fitting folder.
+Chat title: "${payload.title}"
+Folders:
+${folderListText}
+
+Respond strictly with JSON: { "folderId": "<matching-folder-id-or-null>" }`;
+
+        try {
+          const apiResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { responseMimeType: 'application/json' },
+            }),
+          });
+
+          if (!apiResp.ok) throw new Error(`API returned ${apiResp.status}`);
+
+          const data = await apiResp.json();
+          const textOut = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!textOut) throw new Error('No candidate returned');
+
+          const parsed = JSON.parse(textOut);
+          const targetId = parsed.folderId;
+
+          if (targetId && folderData.folderContents) {
+            const conversationId = payload.pathname.split('/').pop() as ConversationId;
+            
+            if (conversationId && folderData.folderContents[targetId]) {
+              const exists = folderData.folderContents[targetId].find((c) => c.conversationId === conversationId);
+              if (!exists) {
+                folderData.folderContents[targetId].push({
+                  conversationId,
+                  title: payload.title,
+                  url: payload.url,
+                  addedAt: Date.now(),
+                });
+                await chrome.storage.sync.set({ [StorageKeys.FOLDER_DATA]: folderData });
+                sendResponse({ ok: true, categorizedTo: targetId });
+                return;
+              }
+            }
+          }
+          sendResponse({ ok: false, error: 'Did not categorize or already exists' });
+        } catch (err: unknown) {
+          console.error('[AutoSort] Failed', err);
+          sendResponse({ ok: false, error: err instanceof Error ? err.message : 'Unknown error' });
+        }
         return;
       }
 
