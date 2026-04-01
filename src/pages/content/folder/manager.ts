@@ -7437,6 +7437,15 @@ export class FolderManager {
               chat.title,
               chat.url
             );
+            
+            // Voyager Pro: Apply AI-suggested tags
+            if (suggestion.tags && suggestion.tags.length > 0) {
+              const conv = this.data.folderContents[targetFolderId].find(c => c.conversationId === chat.id);
+              if (conv) {
+                conv.tags = suggestion.tags;
+              }
+            }
+            
             movedCount++;
           }
         }

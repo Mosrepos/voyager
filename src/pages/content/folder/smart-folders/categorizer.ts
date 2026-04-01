@@ -6,6 +6,7 @@ export interface OrganizationSuggestion {
   suggestedFolderName?: string;
   confidence: number;
   reasoning: string;
+  tags?: string[];
 }
 
 export interface OrganizationResult {
@@ -16,7 +17,7 @@ export interface OrganizationResult {
 
 /**
  * Voyager Pro: AI-based chat categorizer
- * Uses Gemini API to suggest folders for chats.
+ * Uses Gemini API to suggest folders and tags for chats.
  */
 export async function organizeConversationsWithAI(
   conversations: ConversationReference[],
@@ -64,7 +65,7 @@ Existing Folders:
 Conversations to organize:
 \${conversationList}
 
-For each conversation, analyze its title, then suggest the most appropriate folder.
+For each conversation, analyze its title, then suggest the most appropriate folder and up to 3 relevant tags.
 \${useExistingFoldersOnly ? 'If no existing folder fits well, use the default folder ID if provided, or suggest null.' : 'If no existing folder fits, suggest a new folder name.'}
 
 Respond with a JSON array of objects with this structure:
@@ -74,7 +75,8 @@ Respond with a JSON array of objects with this structure:
     "suggestedFolderId": "folder-id-or-null",
     "suggestedFolderName": "New Folder Name (only if creating new)",
     "confidence": 0.95,
-    "reasoning": "Brief explanation"
+    "reasoning": "Brief explanation",
+    "tags": ["Tag1", "Tag2"]
   }
 ]
 
