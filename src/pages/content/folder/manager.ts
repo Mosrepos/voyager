@@ -17,6 +17,7 @@ import { FolderImportExportService } from '@/features/folder/services/FolderImpo
 import type { ImportStrategy } from '@/features/folder/types/import-export';
 import { getTranslationSync, getTranslationSyncUnsafe, initI18n } from '@/utils/i18n';
 
+import { registerSmartFolderAdapter } from './smart-folders';
 import { sortConversationsByPriority } from './conversationSort';
 import { FOLDER_COLORS, getFolderColor, isDarkMode } from './folderColors';
 import { DEFAULT_CONVERSATION_ICON, GEM_CONFIG, getGemIcon } from './gemConfig';
@@ -220,6 +221,9 @@ export class FolderManager {
 
       // Initialize folder UI
       await this.initializeFolderUI();
+
+      // Voyager Pro: Register Smart Folder adapter hooks
+      registerSmartFolderAdapter(this);
 
       this.debug('Initialized successfully');
     } catch (error) {
