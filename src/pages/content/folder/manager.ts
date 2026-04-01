@@ -18,6 +18,7 @@ import type { ImportStrategy } from '@/features/folder/types/import-export';
 import { getTranslationSync, getTranslationSyncUnsafe, initI18n } from '@/utils/i18n';
 
 import { registerSmartFolderAdapter } from './smart-folders';
+import { batchOrganizeConversations } from './smart-folders/categorizer';
 import { sortConversationsByPriority } from './conversationSort';
 import { FOLDER_COLORS, getFolderColor, isDarkMode } from './folderColors';
 import { DEFAULT_CONVERSATION_ICON, GEM_CONFIG, getGemIcon } from './gemConfig';
@@ -701,6 +702,15 @@ export class FolderManager {
     addButton.title = this.t('folder_create');
     addButton.addEventListener('click', () => this.createFolder());
 
+    // Voyager Pro: AI Organize Button
+    const aiButton = document.createElement('button');
+    aiButton.className = 'gv-folder-action-btn gv-ai-organize-btn';
+    aiButton.innerHTML = `<mat-icon role="img" class="mat-icon notranslate google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true">auto_awesome</mat-icon>`;
+    aiButton.title = 'Auto-organize chats with AI';
+    aiButton.style.color = 'var(--gem-sys-color-primary, #1a73e8)';
+    aiButton.addEventListener('click', () => this.triggerAIOrganization());
+
+    actionsContainer.appendChild(aiButton);
     actionsContainer.appendChild(addButton);
 
     header.appendChild(titleContainer);
@@ -7298,6 +7308,105 @@ export class FolderManager {
       console.warn('[FolderManager] Failed to get sync state for tooltip:', e);
     }
     return this.t('folder_cloud_sync');
+  }
+
+  /**
+   * Voyager Pro: Trigger AI-based organization of chats
+   */
+  private async triggerAIOrganization(): Promise<void> {
+    try {
+      this.debug('Triggering AI Organization...');
+      
+      // Get Gemini API Key from storage
+      const settings = await browser.storage.local.get(['gvGeminiApiKey']);
+      let apiKey = settings.gvGeminiApiKey;
+
+      if (!apiKey) {
+        apiKey = prompt('Please enter your Gemini API Key (get it from aistudio.google.com):');
+        if (!apiKey) return;
+        await browser.storage.local.set({ gvGeminiApiKey: apiKey });
+      }
+
+      this.showNotification('AI is analyzing your chats...', 'info');
+
+      // 1. Collect all chats from the sidebar
+      const chats = this.collectAllSidebarConversations();
+      
+      // 2. Filter to only uncategorized chats (not in any folder)
+      const categorizedChatIds = new Set<string>();
+      Object.values(this.data.folderContents).forEach(folderConvs => {
+        folderConvs.forEach(c => categorizedChatIds.add(c.conversationId));
+      });
+      
+      const uncategorizedChats = chats.filter(c => !categorizedChatIds.has(c.id));
+      
+      if (uncategorizedChats.length === 0) {
+        this.showNotification('All chats are already organized!', 'success');
+        return;
+      }
+
+      // 3. Call AI to get suggestions
+      const result = await batchOrganizeConversations(
+        uncategorizedChats.map(c => ({ conversationId: c.id, title: c.title, url: c.url, addedAt: Date.now() })),
+        this.data.folders,
+        apiKey,
+        false, // Allow creating new folders
+        null,
+        15, // batch size
+        (processed, total) => {
+          this.debug(`AI Progress: ${processed}/${total}`);
+        }
+      );
+
+      if (!result.success || !result.suggestions) {
+        throw new Error(result.error || 'AI organization failed');
+      }
+
+      // 4. Apply suggestions
+      let movedCount = 0;
+      for (const suggestion of result.suggestions) {
+        if (!suggestion.suggestedFolderId && !suggestion.suggestedFolderName) continue;
+
+        let targetFolderId = suggestion.suggestedFolderId;
+
+        // Create new folder if suggested
+        if (!targetFolderId && suggestion.suggestedFolderName) {
+          const newFolder: Folder = {
+            id: this.generateId(),
+            name: suggestion.suggestedFolderName,
+            parentId: null,
+            isExpanded: true,
+            isSmart: true,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          this.data.folders.push(newFolder);
+          this.data.folderContents[newFolder.id] = [];
+          targetFolderId = newFolder.id;
+        }
+
+        if (targetFolderId) {
+          const chat = uncategorizedChats.find(c => c.id === suggestion.conversationId);
+          if (chat) {
+            this.addConversationToFolderFromNative(
+              targetFolderId,
+              chat.id,
+              chat.title,
+              chat.url
+            );
+            movedCount++;
+          }
+        }
+      }
+
+      this.saveData();
+      this.refresh();
+      this.showNotification(`AI organized ${movedCount} chats!`, 'success');
+
+    } catch (error) {
+      console.error('[VoyagerPro] AI Organization failed:', error);
+      this.showNotification(`AI Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
   }
 
   /**
