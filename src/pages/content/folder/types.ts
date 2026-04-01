@@ -27,6 +27,8 @@ export interface ConversationReference {
   starred?: boolean; // Whether this conversation is starred in the folder
   customTitle?: boolean; // Whether title was manually renamed in folder (don't auto-sync from native)
   sortIndex?: number; // Manual sort order within the same folder group
+  // Voyager Pro: Tagging system
+  tags?: string[];
 }
 
 export interface FolderData {

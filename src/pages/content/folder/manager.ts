@@ -1046,6 +1046,33 @@ export class FolderManager {
     title.addEventListener('mouseenter', () => this.showTooltip(title, displayTitle));
     title.addEventListener('mouseleave', () => this.hideTooltip());
 
+    // Voyager Pro: Render Tags
+    const tagsContainer = document.createElement('div');
+    tagsContainer.className = 'gv-conversation-tags';
+    tagsContainer.style.display = 'flex';
+    tagsContainer.style.gap = '4px';
+    tagsContainer.style.flexWrap = 'wrap';
+    tagsContainer.style.marginTop = '2px';
+    tagsContainer.style.marginLeft = '28px'; // Align with title text
+
+    if (conv.tags && conv.tags.length > 0) {
+      conv.tags.forEach((tag) => {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'gv-conversation-tag';
+        tagEl.textContent = tag;
+        Object.assign(tagEl.style, {
+          fontSize: '9px',
+          padding: '1px 4px',
+          borderRadius: '4px',
+          backgroundColor: 'var(--gem-sys-color-surface-container-highest, #e1e3e1)',
+          color: 'var(--gem-sys-color-on-surface-variant, #444744)',
+          border: '1px solid var(--gem-sys-color-outline-variant, #c4c7c5)',
+          lineHeight: '1',
+        });
+        tagsContainer.appendChild(tagEl);
+      });
+    }
+
     // Actions container for buttons
     const actionsContainer = document.createElement('div');
     actionsContainer.className = 'gv-conversation-actions';
@@ -1063,6 +1090,16 @@ export class FolderManager {
       this.toggleConversationStar(folderId, conv.conversationId);
     });
 
+    // Voyager Pro: Tag Button
+    const tagBtn = document.createElement('button');
+    tagBtn.className = 'gv-conversation-tag-btn';
+    tagBtn.innerHTML = `<mat-icon role="img" class="mat-icon notranslate google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true">label</mat-icon>`;
+    tagBtn.title = 'Manage tags';
+    tagBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.promptManageTags(folderId, conv.conversationId);
+    });
+
     // Remove button
     const removeBtn = document.createElement('button');
     removeBtn.className = 'gv-conversation-remove-btn';
@@ -1075,6 +1112,7 @@ export class FolderManager {
     });
 
     actionsContainer.appendChild(starBtn);
+    actionsContainer.appendChild(tagBtn);
     actionsContainer.appendChild(removeBtn);
 
     // Long-press detection for entering multi-select mode
@@ -1145,6 +1183,11 @@ export class FolderManager {
     convEl.appendChild(icon);
     convEl.appendChild(title);
     convEl.appendChild(actionsContainer);
+    
+    // Voyager Pro: Append tags below title
+    if (conv.tags && conv.tags.length > 0) {
+      convEl.appendChild(tagsContainer);
+    }
 
     return convEl;
   }
@@ -7407,6 +7450,34 @@ export class FolderManager {
       console.error('[VoyagerPro] AI Organization failed:', error);
       this.showNotification(`AI Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
     }
+  }
+
+  /**
+   * Voyager Pro: Show a prompt to manage tags for a conversation
+   */
+  private promptManageTags(folderId: string, conversationId: string): void {
+    const conv = this.data.folderContents[folderId]?.find(
+      (c) => c.conversationId === conversationId,
+    );
+    if (!conv) return;
+
+    const currentTags = conv.tags || [];
+    const tagsString = prompt(
+      'Enter tags separated by commas:',
+      currentTags.join(', '),
+    );
+
+    if (tagsString === null) return; // Cancelled
+
+    const newTags = tagsString
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+
+    conv.tags = newTags;
+    conv.updatedAt = Date.now();
+    this.saveData();
+    this.refresh();
   }
 
   /**
