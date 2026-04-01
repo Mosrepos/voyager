@@ -806,6 +806,28 @@ export class FolderManager {
     folderName.addEventListener('mouseenter', () => this.showTooltip(folderName, folder.name));
     folderName.addEventListener('mouseleave', () => this.hideTooltip());
 
+    // Voyager Pro: Smart Folder Badge
+    if (folder.isSmart) {
+      const smartBadge = document.createElement('span');
+      smartBadge.className = 'gv-folder-smart-badge';
+      smartBadge.textContent = 'AI';
+      smartBadge.title = 'Smart Folder (Auto-categorized)';
+      Object.assign(smartBadge.style, {
+        fontSize: '10px',
+        backgroundColor: 'var(--gem-sys-color-primary-container, #d3e3fd)',
+        color: 'var(--gem-sys-color-on-primary-container, #041e49)',
+        padding: '0px 4px',
+        borderRadius: '4px',
+        marginLeft: '4px',
+        fontWeight: 'bold',
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: '14px',
+        verticalAlign: 'middle',
+      });
+      folderHeader.appendChild(smartBadge);
+    }
+
     // Pin button
     const pinBtn = document.createElement('button');
     pinBtn.className = 'gv-folder-pin-btn';
