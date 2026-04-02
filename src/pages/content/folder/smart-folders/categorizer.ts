@@ -43,30 +43,30 @@ export async function organizeConversationsWithAI(
 
   try {
     const folderList = folders
-      .map((f) => `- \${f.name} (ID: \${f.id})`)
+      .map((f) => `- ${f.name} (ID: ${f.id})`)
       .join('\n');
 
     const conversationList = conversations
       .map(
         (c) =>
-          `- ID: \${c.conversationId}, Title: "\${c.title || 'Untitled'}"`,
+          `- ID: ${c.conversationId}, Title: "${c.title || 'Untitled'}"`,
       )
       .join('\n');
 
-    const prompt = \`You are an AI assistant helping to organize conversations into folders.
+    const prompt = `You are an AI assistant helping to organize conversations into folders.
 
-\${useExistingFoldersOnly ? 'IMPORTANT: You can ONLY use the existing folders listed below. Do not suggest creating new folders.' : 'You can suggest using existing folders or creating new ones if needed.'}
+${useExistingFoldersOnly ? 'IMPORTANT: You can ONLY use the existing folders listed below. Do not suggest creating new folders.' : 'You can suggest using existing folders or creating new ones if needed.'}
 
 Existing Folders:
-\${folderList || 'No folders exist yet'}
+${folderList || 'No folders exist yet'}
 
-\${defaultFolderId ? \`Default Folder ID for unclassifiable items: \${defaultFolderId}\` : ''}
+${defaultFolderId ? `Default Folder ID for unclassifiable items: ${defaultFolderId}` : ''}
 
 Conversations to organize:
-\${conversationList}
+${conversationList}
 
 For each conversation, analyze its title, then suggest the most appropriate folder and up to 3 relevant tags.
-\${useExistingFoldersOnly ? 'If no existing folder fits well, use the default folder ID if provided, or suggest null.' : 'If no existing folder fits, suggest a new folder name.'}
+${useExistingFoldersOnly ? 'If no existing folder fits well, use the default folder ID if provided, or suggest null.' : 'If no existing folder fits, suggest a new folder name.'}
 
 Respond with a JSON array of objects with this structure:
 [
@@ -80,10 +80,10 @@ Respond with a JSON array of objects with this structure:
   }
 ]
 
-Only return the JSON array, no other text.\`;
+Only return the JSON array, no other text.`;
 
     const response = await fetch(
-      \`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=\${apiKey}\`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
@@ -112,7 +112,7 @@ Only return the JSON array, no other text.\`;
     if (!response.ok) {
       const errorData = await response.json();
       throw new Error(
-        errorData.error?.message || \`API request failed: \${response.status}\`,
+        errorData.error?.message || `API request failed: ${response.status}`,
       );
     }
 
@@ -123,9 +123,9 @@ Only return the JSON array, no other text.\`;
     // Extract JSON from response (handle markdown code blocks)
     let jsonText = text.trim();
     if (jsonText.startsWith('```json')) {
-      jsonText = jsonText.replace(/^```json\n/, '').replace(/\\n\`\`\`$/, '');
+      jsonText = jsonText.replace(/^```json\n/, '').replace(/\n```$/, '');
     } else if (jsonText.startsWith('```')) {
-      jsonText = jsonText.replace(/^```\n/, '').replace(/\\n\`\`\`$/, '');
+      jsonText = jsonText.replace(/^```\n/, '').replace(/\n```$/, '');
     }
 
     const suggestions: OrganizationSuggestion[] = JSON.parse(jsonText);
