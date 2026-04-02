@@ -1,3 +1,5 @@
+import { SmartFolderConfig } from './smart-folders/types';
+
 export interface Folder {
   id: string;
   name: string;
@@ -8,6 +10,9 @@ export interface Folder {
   sortIndex?: number; // Manual sort order within the same parent group
   createdAt: number;
   updatedAt: number;
+  // Voyager Pro: Smart Folder properties
+  isSmart?: boolean;
+  config?: SmartFolderConfig;
 }
 
 export interface ConversationReference {
@@ -22,6 +27,8 @@ export interface ConversationReference {
   starred?: boolean; // Whether this conversation is starred in the folder
   customTitle?: boolean; // Whether title was manually renamed in folder (don't auto-sync from native)
   sortIndex?: number; // Manual sort order within the same folder group
+  // Voyager Pro: Tagging system
+  tags?: string[];
 }
 
 export interface FolderData {

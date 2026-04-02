@@ -17,6 +17,8 @@ import { FolderImportExportService } from '@/features/folder/services/FolderImpo
 import type { ImportStrategy } from '@/features/folder/types/import-export';
 import { getTranslationSync, getTranslationSyncUnsafe, initI18n } from '@/utils/i18n';
 
+import { registerSmartFolderAdapter } from './smart-folders';
+import { batchOrganizeConversations } from './smart-folders/categorizer';
 import { sortConversationsByPriority } from './conversationSort';
 import { FOLDER_COLORS, getFolderColor, isDarkMode } from './folderColors';
 import { DEFAULT_CONVERSATION_ICON, GEM_CONFIG, getGemIcon } from './gemConfig';
@@ -220,6 +222,9 @@ export class FolderManager {
 
       // Initialize folder UI
       await this.initializeFolderUI();
+
+      // Voyager Pro: Register Smart Folder adapter hooks
+      registerSmartFolderAdapter(this);
 
       this.debug('Initialized successfully');
     } catch (error) {
@@ -697,6 +702,15 @@ export class FolderManager {
     addButton.title = this.t('folder_create');
     addButton.addEventListener('click', () => this.createFolder());
 
+    // Voyager Pro: AI Organize Button
+    const aiButton = document.createElement('button');
+    aiButton.className = 'gv-folder-action-btn gv-ai-organize-btn';
+    aiButton.innerHTML = `<mat-icon role="img" class="mat-icon notranslate google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true">auto_awesome</mat-icon>`;
+    aiButton.title = 'Auto-organize chats with AI';
+    aiButton.style.color = 'var(--gem-sys-color-primary, #1a73e8)';
+    aiButton.addEventListener('click', () => this.triggerAIOrganization());
+
+    actionsContainer.appendChild(aiButton);
     actionsContainer.appendChild(addButton);
 
     header.appendChild(titleContainer);
@@ -801,6 +815,28 @@ export class FolderManager {
     // Add tooltip event listeners
     folderName.addEventListener('mouseenter', () => this.showTooltip(folderName, folder.name));
     folderName.addEventListener('mouseleave', () => this.hideTooltip());
+
+    // Voyager Pro: Smart Folder Badge
+    if (folder.isSmart) {
+      const smartBadge = document.createElement('span');
+      smartBadge.className = 'gv-folder-smart-badge';
+      smartBadge.textContent = 'AI';
+      smartBadge.title = 'Smart Folder (Auto-categorized)';
+      Object.assign(smartBadge.style, {
+        fontSize: '10px',
+        backgroundColor: 'var(--gem-sys-color-primary-container, #d3e3fd)',
+        color: 'var(--gem-sys-color-on-primary-container, #041e49)',
+        padding: '0px 4px',
+        borderRadius: '4px',
+        marginLeft: '4px',
+        fontWeight: 'bold',
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: '14px',
+        verticalAlign: 'middle',
+      });
+      folderHeader.appendChild(smartBadge);
+    }
 
     // Pin button
     const pinBtn = document.createElement('button');
@@ -1010,6 +1046,33 @@ export class FolderManager {
     title.addEventListener('mouseenter', () => this.showTooltip(title, displayTitle));
     title.addEventListener('mouseleave', () => this.hideTooltip());
 
+    // Voyager Pro: Render Tags
+    const tagsContainer = document.createElement('div');
+    tagsContainer.className = 'gv-conversation-tags';
+    tagsContainer.style.display = 'flex';
+    tagsContainer.style.gap = '4px';
+    tagsContainer.style.flexWrap = 'wrap';
+    tagsContainer.style.marginTop = '2px';
+    tagsContainer.style.marginLeft = '28px'; // Align with title text
+
+    if (conv.tags && conv.tags.length > 0) {
+      conv.tags.forEach((tag) => {
+        const tagEl = document.createElement('span');
+        tagEl.className = 'gv-conversation-tag';
+        tagEl.textContent = tag;
+        Object.assign(tagEl.style, {
+          fontSize: '9px',
+          padding: '1px 4px',
+          borderRadius: '4px',
+          backgroundColor: 'var(--gem-sys-color-surface-container-highest, #e1e3e1)',
+          color: 'var(--gem-sys-color-on-surface-variant, #444744)',
+          border: '1px solid var(--gem-sys-color-outline-variant, #c4c7c5)',
+          lineHeight: '1',
+        });
+        tagsContainer.appendChild(tagEl);
+      });
+    }
+
     // Actions container for buttons
     const actionsContainer = document.createElement('div');
     actionsContainer.className = 'gv-conversation-actions';
@@ -1027,6 +1090,16 @@ export class FolderManager {
       this.toggleConversationStar(folderId, conv.conversationId);
     });
 
+    // Voyager Pro: Tag Button
+    const tagBtn = document.createElement('button');
+    tagBtn.className = 'gv-conversation-tag-btn';
+    tagBtn.innerHTML = `<mat-icon role="img" class="mat-icon notranslate google-symbols mat-ligature-font mat-icon-no-color" aria-hidden="true">label</mat-icon>`;
+    tagBtn.title = 'Manage tags';
+    tagBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.promptManageTags(folderId, conv.conversationId);
+    });
+
     // Remove button
     const removeBtn = document.createElement('button');
     removeBtn.className = 'gv-conversation-remove-btn';
@@ -1039,6 +1112,7 @@ export class FolderManager {
     });
 
     actionsContainer.appendChild(starBtn);
+    actionsContainer.appendChild(tagBtn);
     actionsContainer.appendChild(removeBtn);
 
     // Long-press detection for entering multi-select mode
@@ -1109,6 +1183,11 @@ export class FolderManager {
     convEl.appendChild(icon);
     convEl.appendChild(title);
     convEl.appendChild(actionsContainer);
+    
+    // Voyager Pro: Append tags below title
+    if (conv.tags && conv.tags.length > 0) {
+      convEl.appendChild(tagsContainer);
+    }
 
     return convEl;
   }
@@ -7272,6 +7351,142 @@ export class FolderManager {
       console.warn('[FolderManager] Failed to get sync state for tooltip:', e);
     }
     return this.t('folder_cloud_sync');
+  }
+
+  /**
+   * Voyager Pro: Trigger AI-based organization of chats
+   */
+  private async triggerAIOrganization(): Promise<void> {
+    try {
+      this.debug('Triggering AI Organization...');
+      
+      // Get Gemini API Key from storage
+      const settings = await browser.storage.local.get(['gvGeminiApiKey']);
+      let apiKey = settings.gvGeminiApiKey;
+
+      if (!apiKey) {
+        apiKey = prompt('Please enter your Gemini API Key (get it from aistudio.google.com):');
+        if (!apiKey) return;
+        await browser.storage.local.set({ gvGeminiApiKey: apiKey });
+      }
+
+      this.showNotification('AI is analyzing your chats...', 'info');
+
+      // 1. Collect all chats from the sidebar
+      const chats = this.collectAllSidebarConversations();
+      
+      // 2. Filter to only uncategorized chats (not in any folder)
+      const categorizedChatIds = new Set<string>();
+      Object.values(this.data.folderContents).forEach(folderConvs => {
+        folderConvs.forEach(c => categorizedChatIds.add(c.conversationId));
+      });
+      
+      const uncategorizedChats = chats.filter(c => !categorizedChatIds.has(c.id));
+      
+      if (uncategorizedChats.length === 0) {
+        this.showNotification('All chats are already organized!', 'success');
+        return;
+      }
+
+      // 3. Call AI to get suggestions
+      const result = await batchOrganizeConversations(
+        uncategorizedChats.map(c => ({ conversationId: c.id, title: c.title, url: c.url, addedAt: Date.now() })),
+        this.data.folders,
+        apiKey,
+        false, // Allow creating new folders
+        null,
+        15, // batch size
+        (processed, total) => {
+          this.debug(`AI Progress: ${processed}/${total}`);
+        }
+      );
+
+      if (!result.success || !result.suggestions) {
+        throw new Error(result.error || 'AI organization failed');
+      }
+
+      // 4. Apply suggestions
+      let movedCount = 0;
+      for (const suggestion of result.suggestions) {
+        if (!suggestion.suggestedFolderId && !suggestion.suggestedFolderName) continue;
+
+        let targetFolderId = suggestion.suggestedFolderId;
+
+        // Create new folder if suggested
+        if (!targetFolderId && suggestion.suggestedFolderName) {
+          const newFolder: Folder = {
+            id: this.generateId(),
+            name: suggestion.suggestedFolderName,
+            parentId: null,
+            isExpanded: true,
+            isSmart: true,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          this.data.folders.push(newFolder);
+          this.data.folderContents[newFolder.id] = [];
+          targetFolderId = newFolder.id;
+        }
+
+        if (targetFolderId) {
+          const chat = uncategorizedChats.find(c => c.id === suggestion.conversationId);
+          if (chat) {
+            this.addConversationToFolderFromNative(
+              targetFolderId,
+              chat.id,
+              chat.title,
+              chat.url
+            );
+            
+            // Voyager Pro: Apply AI-suggested tags
+            if (suggestion.tags && suggestion.tags.length > 0) {
+              const conv = this.data.folderContents[targetFolderId].find(c => c.conversationId === chat.id);
+              if (conv) {
+                conv.tags = suggestion.tags;
+              }
+            }
+            
+            movedCount++;
+          }
+        }
+      }
+
+      this.saveData();
+      this.refresh();
+      this.showNotification(`AI organized ${movedCount} chats!`, 'success');
+
+    } catch (error) {
+      console.error('[VoyagerPro] AI Organization failed:', error);
+      this.showNotification(`AI Error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
+    }
+  }
+
+  /**
+   * Voyager Pro: Show a prompt to manage tags for a conversation
+   */
+  private promptManageTags(folderId: string, conversationId: string): void {
+    const conv = this.data.folderContents[folderId]?.find(
+      (c) => c.conversationId === conversationId,
+    );
+    if (!conv) return;
+
+    const currentTags = conv.tags || [];
+    const tagsString = prompt(
+      'Enter tags separated by commas:',
+      currentTags.join(', '),
+    );
+
+    if (tagsString === null) return; // Cancelled
+
+    const newTags = tagsString
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
+
+    conv.tags = newTags;
+    conv.updatedAt = Date.now();
+    this.saveData();
+    this.refresh();
   }
 
   /**
